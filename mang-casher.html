@@ -66,7 +66,8 @@ details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5
 <div class="fg"><label>تاريخ الاشتراك</label><input type="date" id="startDate" required></div>
 <div class="fg"><label>المدة (أشهر)</label><input type="number" id="duration" value="1" min="1" required></div>
 <div class="fg"><label>تاريخ الانتهاء (تلقائي)</label><input type="date" id="endDate" readonly></div>
-<div class="fg"><label>السعر (دينار)</label><input type="number" id="price" value="0" min="0" required></div>
+<div class="fg"><label>سعر اليوزر (دينار)</label><input type="number" id="uprice" value="1000" min="0"></div>
+<div class="fg"><label>السعر الكلي (تلقائي، تكدر تعدله)</label><input type="number" id="price" value="0" min="0" required></div>
 <div class="fg"><label>المدفوع (دينار)</label><input type="number" id="paid" value="0" min="0" required></div>
 <div class="fg"><label>المتبقي (تلقائي)</label><input type="number" id="rem" value="0" readonly></div>
 <div class="fg"><label>عدد اليوزرات</label><input type="number" id="users" value="1" min="1" required></div>
@@ -125,7 +126,7 @@ function norm(a){const price=Math.max(0,Number(a.price)||0);
  return{id:a.id||Date.now()+Math.random(),name:String(a.name||''),phone:String(a.phone||''),
  startDate:a.startDate||today(),duration:parseInt(a.duration)||1,endDate:a.endDate||today(),
  price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt(a.users)||1,
- notes:String(a.notes||''),payments:Array.isArray(a.payments)?a.payments:[]}}
+ notes:String(a.notes||''),unitPrice:Number(a.unitPrice)||0,payments:Array.isArray(a.payments)?a.payments:[]}}
 
 let agents=[];
 let unit=parseFloat(localStorage.getItem('unitPrice'))||1000;
@@ -133,11 +134,13 @@ let unit=parseFloat(localStorage.getItem('unitPrice'))||1000;
 function persist(a){return db.collection('agents').doc(String(a.id)).set(a).catch(e=>alert('فشل الحفظ: '+e.message))}
 function bulkSet(list){const b=db.batch();list.forEach(a=>b.set(db.collection('agents').doc(String(a.id)),a));return b.commit().catch(e=>alert('فشل الحفظ: '+e.message))}
 function calcEnd(){const s=$('startDate').value,d=parseInt($('duration').value)||1;if(s)$('endDate').value=addMonths(s,d)}
+function calcPrice(){const u=parseFloat($('users').value)||0,p=parseFloat($('uprice').value)||0,d=parseInt($('duration').value)||1;$('price').value=u*p*d;calcRem()}
 function calcRem(){const p=parseFloat($('price').value)||0,q=parseFloat($('paid').value)||0;$('rem').value=Math.max(0,p-q)}
-function resetForm(){$('form').reset();$('edit-id').value='';$('submit-btn').innerText='إضافة وكيل';$('startDate').value=today();calcEnd();calcRem()}
+function resetForm(){$('form').reset();$('edit-id').value='';$('submit-btn').innerText='إضافة وكيل';$('startDate').value=today();$('uprice').value=unit;calcEnd();calcPrice()}
 
 $('startDate').addEventListener('change',calcEnd);
 $('duration').addEventListener('input',calcEnd);
+['users','uprice','duration'].forEach(i=>$(i).addEventListener('input',calcPrice));
 $('price').addEventListener('input',calcRem);
 $('paid').addEventListener('input',calcRem);
 ['search','fStatus','fPay','sort'].forEach(i=>$(i).addEventListener('input',render));
@@ -154,7 +157,7 @@ $('form').addEventListener('submit',e=>{
  const old=id?agents.find(a=>String(a.id)===id):null;
  const data={id:old?old.id:Date.now(),name:$('name').value.trim(),phone:$('phone').value.trim(),
   startDate:$('startDate').value,duration:parseInt($('duration').value)||1,endDate:$('endDate').value,
-  price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt($('users').value)||1,
+  price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt($('users').value)||1,unitPrice:parseFloat($('uprice').value)||0,
   notes:$('notes').value.trim(),payments:old?old.payments:(paid>0?[{date:today(),amount:paid}]:[])};
  persist(data);resetForm();
 });
@@ -163,7 +166,7 @@ function find(id){return agents.find(a=>String(a.id)===String(id))}
 function del(id){if(confirm('تأكد من حذف هذا الوكيل؟'))db.collection('agents').doc(String(id)).delete()}
 function edit(id){const a=find(id);if(!a)return;
  $('name').value=a.name;$('phone').value=a.phone;$('startDate').value=a.startDate;$('duration').value=a.duration;
- $('price').value=a.price;$('paid').value=a.paidAmount;$('users').value=a.users;$('notes').value=a.notes;
+ $('price').value=a.price;$('paid').value=a.paidAmount;$('users').value=a.users;$('uprice').value=a.unitPrice||unit;$('notes').value=a.notes;
  calcEnd();calcRem();$('edit-id').value=a.id;$('submit-btn').innerText='تحديث بيانات الوكيل';scrollTo({top:0,behavior:'smooth'})}
 
 function openModal(title,info,labels,vals,onOk){
@@ -306,7 +309,7 @@ auth.onAuthStateChanged(u=>{
  if(u){$('login').style.display='none';$('app').style.display='block';resetForm();
   unsub=db.collection('agents').onSnapshot(snap=>{agents=snap.docs.map(d=>norm(d.data()));render();
    if(first){first=false;offerUpload(snap.empty)}},err=>alert('خطأ بالاتصال: '+err.message));
-  unsub2=db.doc('settings/main').onSnapshot(d=>{if(d.exists&&d.data().unit){unit=d.data().unit;$('unit').value=unit}});
+  unsub2=db.doc('settings/main').onSnapshot(d=>{if(d.exists&&d.data().unit){unit=d.data().unit;$('unit').value=unit;if(!$('edit-id').value){$('uprice').value=unit;calcPrice()}}});
  }else{if(unsub)unsub();if(unsub2)unsub2();first=true;agents=[];render();$('app').style.display='none';$('login').style.display='block'}
 });
 </script>
