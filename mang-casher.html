@@ -39,6 +39,13 @@ details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5
 </style>
 </head>
 <body>
+<div id="login" style="max-width:340px;margin:80px auto;background:#fff;padding:25px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1)">
+<h2 style="text-align:center;margin-top:0">تسجيل الدخول</h2>
+<div class="fg" style="margin-bottom:12px"><label>الإيميل</label><input id="em" type="email" autocomplete="username"></div>
+<div class="fg" style="margin-bottom:12px"><label>كلمة السر</label><input id="pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
+<button class="btn-add" style="width:100%" onclick="login()">دخول</button>
+<p id="lerr" style="color:#c0392b;text-align:center"></p>
+</div>
 <div class="container" id="app" style="display:none">
 <h1>نظام إدارة اشتراكات الوكلاء</h1>
 
@@ -81,6 +88,7 @@ details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5
 <button class="btn" style="background:#1e7e34" onclick="exportCSV()">📊 Excel (CSV)</button>
 <button class="btn" style="background:#2980b9" onclick="exportBackup()">📥 نسخة احتياطية</button>
 <button class="btn" style="background:#8e44ad" onclick="$('file').click()">📤 استرجاع</button>
+<button class="btn" style="background:#7f8c8d" onclick="logout()">🚪 خروج</button>
 <button class="btn" style="background:#16a085" onclick="$('csvfile').click()">📄 استيراد من CSV</button>
 <input type="file" id="csvfile" accept=".csv,text/csv" style="display:none">
 <input type="file" id="file" accept=".json" style="display:none">
@@ -94,8 +102,10 @@ details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5
 </div>
 
 <div class="modal" id="modal"><div class="mbox"><h3 id="m-title"></h3><p id="m-info"></p><div id="m-fields"></div><div class="btns"><button class="btn" style="background:#27ae60" id="m-ok">تأكيد</button><button class="btn" style="background:#7f8c8d" onclick="closeModal()">إغلاق</button></div></div></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
-const PASSWORD="1234aa"; // قفل خفيف فقط، مو حماية حقيقية
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>(Number(n)||0).toLocaleString('en-US');
@@ -118,10 +128,10 @@ function norm(a){const price=Math.max(0,Number(a.price)||0);
  notes:String(a.notes||''),payments:Array.isArray(a.payments)?a.payments:[]}}
 
 let agents=[];
-try{agents=(JSON.parse(localStorage.getItem('agents'))||[]).map(norm)}catch(e){agents=[]}
 let unit=parseFloat(localStorage.getItem('unitPrice'))||1000;
 
-function save(){localStorage.setItem('agents',JSON.stringify(agents));render()}
+function persist(a){return db.collection('agents').doc(String(a.id)).set(a).catch(e=>alert('فشل الحفظ: '+e.message))}
+function bulkSet(list){const b=db.batch();list.forEach(a=>b.set(db.collection('agents').doc(String(a.id)),a));return b.commit().catch(e=>alert('فشل الحفظ: '+e.message))}
 function calcEnd(){const s=$('startDate').value,d=parseInt($('duration').value)||1;if(s)$('endDate').value=addMonths(s,d)}
 function calcRem(){const p=parseFloat($('price').value)||0,q=parseFloat($('paid').value)||0;$('rem').value=Math.max(0,p-q)}
 function resetForm(){$('form').reset();$('edit-id').value='';$('submit-btn').innerText='إضافة وكيل';$('startDate').value=today();calcEnd();calcRem()}
@@ -131,7 +141,7 @@ $('duration').addEventListener('input',calcEnd);
 $('price').addEventListener('input',calcRem);
 $('paid').addEventListener('input',calcRem);
 ['search','fStatus','fPay','sort'].forEach(i=>$(i).addEventListener('input',render));
-$('unit').addEventListener('input',()=>{unit=parseFloat($('unit').value)||0;localStorage.setItem('unitPrice',unit)});
+$('unit').addEventListener('input',()=>{unit=parseFloat($('unit').value)||0;db.doc('settings/main').set({unit})});
 $('file').addEventListener('change',importBackup);
 
 $('form').addEventListener('submit',e=>{
@@ -146,12 +156,11 @@ $('form').addEventListener('submit',e=>{
   startDate:$('startDate').value,duration:parseInt($('duration').value)||1,endDate:$('endDate').value,
   price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt($('users').value)||1,
   notes:$('notes').value.trim(),payments:old?old.payments:(paid>0?[{date:today(),amount:paid}]:[])};
- if(old)agents[agents.indexOf(old)]=data;else agents.push(data);
- save();resetForm();
+ persist(data);resetForm();
 });
 
 function find(id){return agents.find(a=>String(a.id)===String(id))}
-function del(id){if(confirm('تأكد من حذف هذا الوكيل؟')){agents=agents.filter(a=>String(a.id)!==String(id));save()}}
+function del(id){if(confirm('تأكد من حذف هذا الوكيل؟'))db.collection('agents').doc(String(id)).delete()}
 function edit(id){const a=find(id);if(!a)return;
  $('name').value=a.name;$('phone').value=a.phone;$('startDate').value=a.startDate;$('duration').value=a.duration;
  $('price').value=a.price;$('paid').value=a.paidAmount;$('users').value=a.users;$('notes').value=a.notes;
@@ -171,7 +180,7 @@ function pay(id){const a=find(id);if(!a)return;
  openModal('تسديد دفعة',a.name+' — المتبقي '+fmt(a.remainingAmount)+' د.ع',['المبلغ المدفوع الآن'],[a.remainingAmount],v=>{
   const x=Math.min(v[0],a.remainingAmount);if(x<=0)return;
   a.paidAmount+=x;a.remainingAmount=Math.max(0,a.price-a.paidAmount);
-  a.payments.push({date:today(),amount:x});save()})}
+  a.payments.push({date:today(),amount:x});persist(a)})}
 function history(id){const a=find(id);if(!a)return;
  alert(a.payments.length?a.payments.map(p=>p.date+'  —  '+fmt(p.amount)+' د.ع').join('\n'):'ما كو دفعات مسجلة.')}
 
@@ -182,7 +191,7 @@ function renew(id){const a=find(id);if(!a)return;
   const base=a.endDate>t?a.endDate:t;
   a.startDate=base;a.endDate=addMonths(base,a.duration||1);
   a.price=price+oldDebt;a.paidAmount=paid;a.remainingAmount=a.price-paid;
-  if(paid>0)a.payments.push({date:t,amount:paid});save()})}
+  if(paid>0)a.payments.push({date:t,amount:paid});persist(a)})}
 
 function sendWA(a,msg){const n=normPhone(a.phone);
  if(n.length<11)return alert('رقم الهاتف غير صحيح');
@@ -249,7 +258,7 @@ function importBackup(e){const f=e.target.files[0];if(!f)return;
  const r=new FileReader();
  r.onload=()=>{try{const d=JSON.parse(r.result);
   if(!Array.isArray(d))throw 0;
-  if(confirm(`سيتم استبدال البيانات الحالية بـ ${d.length} وكيل. تكمل؟`)){agents=d.map(norm);save();alert('تم الاسترجاع!')}
+  if(confirm(`سيتم رفع ${d.length} وكيل ودمجهم مع الموجودين (نفس الوكيل يتحدث). تكمل؟`)){bulkSet(d.map(norm));alert('تم الاسترجاع!')}
  }catch(x){alert('ملف غير صالح!')}e.target.value=''};
  r.readAsText(f)}
 
@@ -277,14 +286,29 @@ function importCSV(e){const f=e.target.files[0];if(!f)return;
     price,paidAmount:paid,users:parseInt(g(r,C.users))||1,notes:g(r,C.notes),payments:paid>0?[{date:start,amount:paid}]:[]})}).filter(a=>a.name);
   const fresh=list.filter(a=>!agents.some(x=>x.name===a.name&&normPhone(x.phone)===normPhone(a.phone)));
   if(confirm(`تمت قراءة ${list.length} وكيل. سيتم إضافة ${fresh.length} وكيل جديد (بدون حذف الموجودين). تكمل؟`)){
-   agents=agents.concat(fresh);save();alert('تم الاستيراد! الوكلاء الآن: '+agents.length)}
+   bulkSet(fresh);alert('تم استيراد '+fresh.length+' وكيل')}
  }catch(x){alert('ملف CSV غير صالح!')}e.target.value=''};
  rd.readAsText(f,'utf-8')}
 $('csvfile').addEventListener('change',importCSV);
 
-if(prompt('الرجاء إدخال رمز الدخول:')===PASSWORD){
- $('app').style.display='block';$('unit').value=unit;resetForm();render();
-}else{document.body.innerHTML="<h2 style='text-align:center;margin-top:50px;color:red'>رمز الدخول غير صحيح.</h2>"}
+firebase.initializeApp({
+ apiKey:"AIzaSyB66MYyPbC-AjBw01kUYnm20BE2sc9qSqI",authDomain:"mang-casher.firebaseapp.com",
+ projectId:"mang-casher",storageBucket:"mang-casher.firebasestorage.app",
+ messagingSenderId:"171095830965",appId:"1:171095830965:web:aafb05628ab4ed74faa9fc"});
+const auth=firebase.auth(),db=firebase.firestore();
+function login(){$('lerr').innerText='';auth.signInWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(()=>{$('lerr').innerText='الإيميل أو كلمة السر غلط'})}
+function logout(){auth.signOut()}
+function offerUpload(empty){let loc=[];try{loc=(JSON.parse(localStorage.getItem('agents'))||[]).map(norm)}catch(e){}
+ if(empty&&loc.length&&confirm(`لكيت ${loc.length} وكيل محفوظين بهذا الجهاز. ترفعهم للسحابة هسه؟`))
+  bulkSet(loc).then(()=>alert('تم الرفع! هسه البيانات تظهر بكل أجهزتك.'))}
+let unsub=null,unsub2=null,first=true;
+auth.onAuthStateChanged(u=>{
+ if(u){$('login').style.display='none';$('app').style.display='block';resetForm();
+  unsub=db.collection('agents').onSnapshot(snap=>{agents=snap.docs.map(d=>norm(d.data()));render();
+   if(first){first=false;offerUpload(snap.empty)}},err=>alert('خطأ بالاتصال: '+err.message));
+  unsub2=db.doc('settings/main').onSnapshot(d=>{if(d.exists&&d.data().unit){unit=d.data().unit;$('unit').value=unit}});
+ }else{if(unsub)unsub();if(unsub2)unsub2();first=true;agents=[];render();$('app').style.display='none';$('login').style.display='block'}
+});
 </script>
 </body>
 </html>
