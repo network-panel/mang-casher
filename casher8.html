@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة اشتراكات الوكلاء</title>
+<style>
+*{box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+body{background:#f4f6f9;margin:0;padding:20px}
+h1{text-align:center;color:#333}
+.stats-grid,.form-grid,.controls-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.stats-grid{margin-bottom:20px}
+.stat-card,.box{background:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05)}
+.box{margin-bottom:20px;padding:20px}
+.stat-card{text-align:center}
+.stat-card h3{margin:0 0 8px;font-size:13px;color:#666}
+.stat-card .value{font-size:20px;font-weight:bold;color:#2c3e50}
+.debt{color:#c0392b!important}
+.fg{display:flex;flex-direction:column}
+.fg label{margin-bottom:5px;font-size:13px;font-weight:bold;color:#555}
+.fg input,.fg select{padding:8px;border:1px solid #ccc;border-radius:4px;font-size:14px}
+.btn-add{grid-column:1/-1;background:#27ae60;color:#fff;border:0;padding:12px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:16px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.btn{padding:8px 12px;border:0;border-radius:4px;font-weight:bold;cursor:pointer;color:#fff;font-size:13px}
+.tc{background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);overflow-x:auto}
+table{width:100%;border-collapse:collapse;text-align:right}
+th,td{padding:10px 12px;border-bottom:1px solid #ddd;font-size:14px;white-space:nowrap}
+th{background:#2c3e50;color:#fff}
+tr:hover{background:#f8f9fa}
+.badge{padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold}
+.b-ok{background:#d4edda;color:#155724}.b-warn{background:#fff3cd;color:#856404}.b-bad{background:#f8d7da;color:#721c24}
+.act{display:flex;gap:5px;align-items:center}
+.act button,.more button{border:0;padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:bold;color:#fff}
+details.more{position:relative}
+details.more summary{cursor:pointer;padding:5px 10px;background:#eee;border-radius:5px;list-style:none}
+details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5px}
+.menu{display:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:99}.modal.show{display:flex}.mbox{background:#fff;padding:20px;border-radius:8px;width:90%;max-width:360px}
+</style>
+</head>
+<body>
+<div class="container" id="app" style="display:none">
+<h1>نظام إدارة اشتراكات الوكلاء</h1>
+
+<div class="stats-grid">
+<div class="stat-card"><h3>إجمالي الوكلاء</h3><div class="value" id="s-agents">0</div></div>
+<div class="stat-card"><h3>إجمالي اليوزرات</h3><div class="value" id="s-users">0</div></div>
+<div class="stat-card"><h3>إجمالي المبالغ</h3><div class="value" id="s-price">0</div></div>
+<div class="stat-card"><h3>الديون المطلوبة</h3><div class="value debt" id="s-debt">0</div></div>
+<div class="stat-card"><h3>الاشتراكات الفعالة</h3><div class="value" id="s-active">0</div></div>
+</div>
+
+<div class="box">
+<form id="form">
+<input type="hidden" id="edit-id" value="">
+<div class="form-grid">
+<div class="fg"><label>اسم الوكيل</label><input id="name" required></div>
+<div class="fg"><label>رقم الهاتف (07xx أو 964xx)</label><input id="phone" required></div>
+<div class="fg"><label>تاريخ الاشتراك</label><input type="date" id="startDate" required></div>
+<div class="fg"><label>المدة (أشهر)</label><input type="number" id="duration" value="1" min="1" required></div>
+<div class="fg"><label>تاريخ الانتهاء (تلقائي)</label><input type="date" id="endDate" readonly></div>
+<div class="fg"><label>السعر (دينار)</label><input type="number" id="price" value="0" min="0" required></div>
+<div class="fg"><label>المدفوع (دينار)</label><input type="number" id="paid" value="0" min="0" required></div>
+<div class="fg"><label>المتبقي (تلقائي)</label><input type="number" id="rem" value="0" readonly></div>
+<div class="fg"><label>عدد اليوزرات</label><input type="number" id="users" value="1" min="1" required></div>
+<div class="fg"><label>الملاحظات</label><input id="notes"></div>
+<button type="submit" class="btn-add" id="submit-btn">إضافة وكيل</button>
+</div>
+</form>
+</div>
+
+<div class="box">
+<div class="controls-grid">
+<div class="fg"><label>🔍 بحث</label><input id="search" placeholder="اسم أو رقم..."></div>
+<div class="fg"><label>📌 حالة الاشتراك</label><select id="fStatus"><option value="ALL">الكل</option><option value="ACTIVE">فعال</option><option value="WARNING">على وشك الانتهاء</option><option value="EXPIRED">منتهي</option></select></div>
+<div class="fg"><label>💳 حالة الدفع</label><select id="fPay"><option value="ALL">الكل</option><option value="PAID">مدفوع بالكامل</option><option value="DEBT">عليه دين</option></select></div>
+<div class="fg"><label>↕️ الترتيب</label><select id="sort"><option value="none">الإضافة</option><option value="end">الأقرب انتهاءً</option><option value="debt">الأكبر دين</option><option value="name">الاسم</option></select></div>
+<div class="fg"><label>💲 سعر اليوزر للتجديد</label><input type="number" id="unit" min="0"></div>
+</div>
+<div class="btns">
+<button class="btn" style="background:#1e7e34" onclick="exportCSV()">📊 Excel (CSV)</button>
+<button class="btn" style="background:#2980b9" onclick="exportBackup()">📥 نسخة احتياطية</button>
+<button class="btn" style="background:#8e44ad" onclick="$('file').click()">📤 استرجاع</button>
+<input type="file" id="file" accept=".json" style="display:none">
+</div>
+</div>
+
+<div class="tc"><table>
+<thead><tr><th>الوكيل</th><th>الهاتف</th><th>البدء</th><th>المدة</th><th>الانتهاء</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>يوزرات</th><th>اشتراك</th><th>الدفع</th><th>ملاحظات</th><th>الإجراءات</th></tr></thead>
+<tbody id="tbody"></tbody>
+</table></div>
+</div>
+
+<div class="modal" id="modal"><div class="mbox"><h3 id="m-title"></h3><p id="m-info"></p><div id="m-fields"></div><div class="btns"><button class="btn" style="background:#27ae60" id="m-ok">تأكيد</button><button class="btn" style="background:#7f8c8d" onclick="closeModal()">إغلاق</button></div></div></div>
+<script>
+const PASSWORD="1234aa"; // قفل خفيف فقط، مو حماية حقيقية
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(Number(n)||0).toLocaleString('en-US');
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const today=()=>iso(new Date());
+function addMonths(s,n){const d=parse(s),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);
+ const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));return iso(d)}
+function normPhone(p){let n=String(p).replace(/\D/g,'');
+ if(n.startsWith('00'))n=n.slice(2);
+ if(n.startsWith('0'))n='964'+n.slice(1);
+ else if(n.length===10&&n.startsWith('7'))n='964'+n;
+ return n}
+function norm(a){const price=Math.max(0,Number(a.price)||0);
+ const paid=a.paidAmount!==undefined?Math.max(0,Number(a.paidAmount)||0):price;
+ return{id:a.id||Date.now()+Math.random(),name:String(a.name||''),phone:String(a.phone||''),
+ startDate:a.startDate||today(),duration:parseInt(a.duration)||1,endDate:a.endDate||today(),
+ price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt(a.users)||1,
+ notes:String(a.notes||''),payments:Array.isArray(a.payments)?a.payments:[]}}
+
+let agents=[];
+try{agents=(JSON.parse(localStorage.getItem('agents'))||[]).map(norm)}catch(e){agents=[]}
+let unit=parseFloat(localStorage.getItem('unitPrice'))||1000;
+
+function save(){localStorage.setItem('agents',JSON.stringify(agents));render()}
+function calcEnd(){const s=$('startDate').value,d=parseInt($('duration').value)||1;if(s)$('endDate').value=addMonths(s,d)}
+function calcRem(){const p=parseFloat($('price').value)||0,q=parseFloat($('paid').value)||0;$('rem').value=Math.max(0,p-q)}
+function resetForm(){$('form').reset();$('edit-id').value='';$('submit-btn').innerText='إضافة وكيل';$('startDate').value=today();calcEnd();calcRem()}
+
+$('startDate').addEventListener('change',calcEnd);
+$('duration').addEventListener('input',calcEnd);
+$('price').addEventListener('input',calcRem);
+$('paid').addEventListener('input',calcRem);
+['search','fStatus','fPay','sort'].forEach(i=>$(i).addEventListener('input',render));
+$('unit').addEventListener('input',()=>{unit=parseFloat($('unit').value)||0;localStorage.setItem('unitPrice',unit)});
+$('file').addEventListener('change',importBackup);
+
+$('form').addEventListener('submit',e=>{
+ e.preventDefault();
+ const price=Math.max(0,parseFloat($('price').value)||0);
+ let paid=Math.max(0,parseFloat($('paid').value)||0);
+ if(paid>price){if(!confirm('المدفوع أكبر من السعر. تريد تكمل؟'))return}
+ calcEnd();
+ const id=$('edit-id').value;
+ const old=id?agents.find(a=>String(a.id)===id):null;
+ const data={id:old?old.id:Date.now(),name:$('name').value.trim(),phone:$('phone').value.trim(),
+  startDate:$('startDate').value,duration:parseInt($('duration').value)||1,endDate:$('endDate').value,
+  price,paidAmount:paid,remainingAmount:Math.max(0,price-paid),users:parseInt($('users').value)||1,
+  notes:$('notes').value.trim(),payments:old?old.payments:(paid>0?[{date:today(),amount:paid}]:[])};
+ if(old)agents[agents.indexOf(old)]=data;else agents.push(data);
+ save();resetForm();
+});
+
+function find(id){return agents.find(a=>String(a.id)===String(id))}
+function del(id){if(confirm('تأكد من حذف هذا الوكيل؟')){agents=agents.filter(a=>String(a.id)!==String(id));save()}}
+function edit(id){const a=find(id);if(!a)return;
+ $('name').value=a.name;$('phone').value=a.phone;$('startDate').value=a.startDate;$('duration').value=a.duration;
+ $('price').value=a.price;$('paid').value=a.paidAmount;$('users').value=a.users;$('notes').value=a.notes;
+ calcEnd();calcRem();$('edit-id').value=a.id;$('submit-btn').innerText='تحديث بيانات الوكيل';scrollTo({top:0,behavior:'smooth'})}
+
+function openModal(title,info,labels,vals,onOk){
+ $('m-title').innerText=title;$('m-info').innerText=info;
+ $('m-fields').innerHTML=labels.map((l,i)=>`<div class="fg" style="margin-bottom:10px"><label>${l}</label><input type="number" min="0" id="mf${i}" value="${vals[i]}"></div>`).join('');
+ $('m-ok').style.display=onOk?'':'none';
+ $('m-ok').onclick=()=>{const v=labels.map((_,i)=>parseFloat($('mf'+i).value));
+  if(v.some(x=>isNaN(x)||x<0))return alert('ادخل رقم صحيح');
+  closeModal();onOk(v)};
+ $('modal').classList.add('show')}
+function closeModal(){$('modal').classList.remove('show')}
+function pay(id){const a=find(id);if(!a)return;
+ if(a.remainingAmount<=0)return openModal('مسدد بالكامل',a.name+' ما عليه دين.',[],[],null);
+ openModal('تسديد دفعة',a.name+' — المتبقي '+fmt(a.remainingAmount)+' د.ع',['المبلغ المدفوع الآن'],[a.remainingAmount],v=>{
+  const x=Math.min(v[0],a.remainingAmount);if(x<=0)return;
+  a.paidAmount+=x;a.remainingAmount=Math.max(0,a.price-a.paidAmount);
+  a.payments.push({date:today(),amount:x});save()})}
+function history(id){const a=find(id);if(!a)return;
+ alert(a.payments.length?a.payments.map(p=>p.date+'  —  '+fmt(p.amount)+' د.ع').join('\n'):'ما كو دفعات مسجلة.')}
+
+function renew(id){const a=find(id);if(!a)return;
+ openModal('تجديد اشتراك',a.name+(a.remainingAmount>0?' — دين سابق '+fmt(a.remainingAmount)+' (يبقى بالمتبقي)':''),
+  ['سعر التجديد','المدفوع الآن'],[a.price-a.remainingAmount||a.price,a.price-a.remainingAmount||a.price],v=>{
+  const price=v[0],paid=Math.min(v[1],price),t=today(),oldDebt=a.remainingAmount;
+  const base=a.endDate>t?a.endDate:t;
+  a.startDate=base;a.endDate=addMonths(base,a.duration||1);
+  a.price=price+oldDebt;a.paidAmount=paid;a.remainingAmount=a.price-paid;
+  if(paid>0)a.payments.push({date:t,amount:paid});save()})}
+
+function sendWA(a,msg){const n=normPhone(a.phone);
+ if(n.length<11)return alert('رقم الهاتف غير صحيح');
+ window.open(`https://wa.me/${n}?text=${encodeURIComponent(msg)}`,'_blank')}
+const hdr=a=>`السلام عليكم ورحمة الله وبركاته\nعزيزنا الوكيل: *${a.name}*\n\n`;
+function msgRemind(id){const a=find(id);if(!a)return;
+ sendWA(a,hdr(a)+`نود تذكيركم بتفاصيل اشتراككم:\n\n🔹 *عدد اليوزرات:* ${a.users}\n📅 *تاريخ نهاية الاشتراك:* ${a.endDate}\n💰 *سعر الاشتراك:* ${fmt(a.price)} دينار\n`+(a.remainingAmount>0?`⚠️ *المبلغ المتبقي:* ${fmt(a.remainingAmount)} دينار\n`:'')+`\nيرجى التسديد وشكراً 💫`)}
+function msgReceipt(id){const a=find(id);if(!a)return;
+ sendWA(a,hdr(a)+`تم استلام المبلغ بنجاح ✅\n\n💰 *المبلغ الواصل:* ${fmt(a.paidAmount)} دينار\n`+(a.remainingAmount>0?`⚠️ *المبلغ المتبقي:* ${fmt(a.remainingAmount)} دينار\n`:'')+`🔹 *عدد اليوزرات:* ${a.users}\n📅 *تاريخ الانتهاء:* ${a.endDate}\n\nتمنياتنا لك بعمل موفق 🚀`)}
+function msgSetup(id){const a=find(id);if(!a)return;
+ sendWA(a,hdr(a)+`تم استلام مبلغ البرمجة بنجاح ✅\n\n💰 *المبلغ الواصل:* ${fmt(a.paidAmount)} دينار\n🎁 *المرفق:* نظام SAS + دعم فني مجاني لمدة شهر\n📅 *تاريخ انتهاء المجاني:* ${a.endDate}\n\nشكراً لثقتكم بنا 🚀`)}
+function msgTrial(id){const a=find(id);if(!a)return;
+ sendWA(a,hdr(a)+`نحيطكم علماً بأن شهر المتابعة ونظام SAS المجاني قد انتهى ⏳\n\n🔹 *عدد اليوزرات:* ${a.users}\n🏷️ *سعر التجديد:* ${fmt(unit)} دينار لكل يوزر\n💰 *المبلغ الكلي:* ${fmt(a.users*unit)} دينار\n\nيرجى التسديد لتفادي توقف النظام 🚀`)}
+
+function getStatus(end){const t=parse(today()),d=Math.round((parse(end)-t)/864e5);
+ if(d<0)return{l:'منتهي',c:'b-bad',k:'EXPIRED'};
+ if(d<=3)return{l:'على وشك الانتهاء',c:'b-warn',k:'WARNING'};
+ return{l:'فعال',c:'b-ok',k:'ACTIVE'}}
+function getPay(a){if(a.remainingAmount<=0)return{l:'مدفوع',c:'b-ok',k:'PAID'};
+ if(a.paidAmount>0)return{l:'جزئي',c:'b-warn',k:'DEBT'};
+ return{l:'آجل',c:'b-bad',k:'DEBT'}}
+
+function render(){
+ const q=$('search').value.toLowerCase(),fs=$('fStatus').value,fp=$('fPay').value,so=$('sort').value;
+ let users=0,price=0,debt=0,active=0;
+ agents.forEach(a=>{users+=a.users;price+=a.price;debt+=a.remainingAmount;
+  const k=getStatus(a.endDate).k;if(k!=='EXPIRED')active++});
+ let list=agents.filter(a=>(a.name.toLowerCase().includes(q)||a.phone.includes(q))
+  &&(fs==='ALL'||getStatus(a.endDate).k===fs)&&(fp==='ALL'||getPay(a).k===fp));
+ if(so==='end')list.sort((a,b)=>a.endDate.localeCompare(b.endDate));
+ if(so==='debt')list.sort((a,b)=>b.remainingAmount-a.remainingAmount);
+ if(so==='name')list.sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+ $('tbody').innerHTML=list.map(a=>{const s=getStatus(a.endDate),p=getPay(a);return`<tr>
+ <td>${esc(a.name)}</td><td>${esc(a.phone)}</td><td>${esc(a.startDate)}</td><td>${a.duration} شهر</td><td>${esc(a.endDate)}</td>
+ <td>${fmt(a.price)}</td><td>${fmt(a.paidAmount)}</td>
+ <td style="color:${a.remainingAmount>0?'#c0392b':'#27ae60'};font-weight:bold">${fmt(a.remainingAmount)}</td>
+ <td>${a.users}</td><td><span class="badge ${s.c}">${s.l}</span></td><td><span class="badge ${p.c}">${p.l}</span></td>
+ <td>${esc(a.notes)||'-'}</td>
+ <td><div class="act">
+ <button style="background:#27ae60" onclick="pay('${a.id}')">💵 تسديد</button>
+ <button style="background:#3498db" onclick="renew('${a.id}')">🔄 تجديد</button>
+ <button style="background:#25D366" onclick="msgRemind('${a.id}')">💬 تذكير</button>
+ <details class="more"><summary>⋮</summary><div class="menu">
+ <button style="background:#8e44ad" onclick="msgReceipt('${a.id}')">🧾 وصل</button>
+ <button style="background:#d35400" onclick="msgSetup('${a.id}')">💻 وصل برمجة</button>
+ <button style="background:#c0392b" onclick="msgTrial('${a.id}')">🔔 انتهاء المجاني</button>
+ <button style="background:#7f8c8d" onclick="history('${a.id}')">📜 سجل الدفعات</button>
+ <button style="background:#f39c12" onclick="edit('${a.id}')">✏️ تعديل</button>
+ <button style="background:#e74c3c" onclick="del('${a.id}')">🗑️ حذف</button>
+ </div></details></div></td></tr>`}).join('');
+ $('s-agents').innerText=agents.length;$('s-users').innerText=users;
+ $('s-price').innerText=fmt(price)+' د.ع';$('s-debt').innerText=fmt(debt)+' د.ع';$('s-active').innerText=active;
+}
+
+function download(content,name,type){const l=document.createElement('a');
+ l.href=URL.createObjectURL(new Blob([content],{type}));l.download=name;document.body.appendChild(l);l.click();l.remove()}
+const csvCell=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+function exportCSV(){if(!agents.length)return alert('لا توجد بيانات!');
+ let c='\uFEFFاسم الوكيل,الهاتف,تاريخ البدء,المدة,تاريخ الانتهاء,السعر,المدفوع,المتبقي,اليوزرات,ملاحظات\n';
+ agents.forEach(a=>{c+=[a.name,a.phone,a.startDate,a.duration,a.endDate,a.price,a.paidAmount,a.remainingAmount,a.users,a.notes].map(csvCell).join(',')+'\n'});
+ download(c,`agents_${today()}.csv`,'text/csv;charset=utf-8')}
+function exportBackup(){download(JSON.stringify(agents,null,2),`backup_${today()}.json`,'application/json')}
+function importBackup(e){const f=e.target.files[0];if(!f)return;
+ const r=new FileReader();
+ r.onload=()=>{try{const d=JSON.parse(r.result);
+  if(!Array.isArray(d))throw 0;
+  if(confirm(`سيتم استبدال البيانات الحالية بـ ${d.length} وكيل. تكمل؟`)){agents=d.map(norm);save();alert('تم الاسترجاع!')}
+ }catch(x){alert('ملف غير صالح!')}e.target.value=''};
+ r.readAsText(f)}
+
+if(prompt('الرجاء إدخال رمز الدخول:')===PASSWORD){
+ $('app').style.display='block';$('unit').value=unit;resetForm();render();
+}else{document.body.innerHTML="<h2 style='text-align:center;margin-top:50px;color:red'>رمز الدخول غير صحيح.</h2>"}
+</script>
+</body>
+</html>
