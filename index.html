@@ -81,6 +81,8 @@ details.more[open] .menu{display:flex;flex-direction:column;gap:4px;margin-top:5
 <button class="btn" style="background:#1e7e34" onclick="exportCSV()">📊 Excel (CSV)</button>
 <button class="btn" style="background:#2980b9" onclick="exportBackup()">📥 نسخة احتياطية</button>
 <button class="btn" style="background:#8e44ad" onclick="$('file').click()">📤 استرجاع</button>
+<button class="btn" style="background:#16a085" onclick="$('csvfile').click()">📄 استيراد من CSV</button>
+<input type="file" id="csvfile" accept=".csv,text/csv" style="display:none">
 <input type="file" id="file" accept=".json" style="display:none">
 </div>
 </div>
@@ -250,6 +252,35 @@ function importBackup(e){const f=e.target.files[0];if(!f)return;
   if(confirm(`سيتم استبدال البيانات الحالية بـ ${d.length} وكيل. تكمل؟`)){agents=d.map(norm);save();alert('تم الاسترجاع!')}
  }catch(x){alert('ملف غير صالح!')}e.target.value=''};
  r.readAsText(f)}
+
+function parseCSV(t){const rows=[];let r=[],c='',q=false;t=t.replace(/^\uFEFF/,'');
+ for(let i=0;i<t.length;i++){const ch=t[i];
+  if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+  else if(ch==='"')q=true;
+  else if(ch===','){r.push(c);c=''}
+  else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);c='';if(r.some(x=>x!==''))rows.push(r);r=[]}
+  else c+=ch}
+ if(c!==''||r.length){r.push(c);rows.push(r)}return rows}
+function importCSV(e){const f=e.target.files[0];if(!f)return;
+ const rd=new FileReader();
+ rd.onload=()=>{try{
+  const rows=parseCSV(rd.result),h=rows.shift().map(x=>x.trim());
+  const col=k=>h.findIndex(x=>x.includes(k));
+  const C={name:col('اسم'),phone:col('هاتف'),start:col('البدء'),dur:col('المدة'),end:col('الانتهاء'),price:col('السعر'),paid:col('المدفوع'),users:col('يوزر'),notes:col('ملاحظ')};
+  if(C.name<0)throw 0;
+  const g=(r,k)=>k>=0?(r[k]||'').trim():'';
+  const list=rows.map(r=>{
+   const price=parseFloat(g(r,C.price))||0,paid=C.paid>=0?(parseFloat(g(r,C.paid))||0):price;
+   const start=g(r,C.start)||today(),dur=parseInt(g(r,C.dur))||1;
+   let ph=g(r,C.phone);if(ph==='undefined')ph='';
+   return norm({name:g(r,C.name),phone:ph,startDate:start,duration:dur,endDate:g(r,C.end)||addMonths(start,dur),
+    price,paidAmount:paid,users:parseInt(g(r,C.users))||1,notes:g(r,C.notes),payments:paid>0?[{date:start,amount:paid}]:[]})}).filter(a=>a.name);
+  const fresh=list.filter(a=>!agents.some(x=>x.name===a.name&&normPhone(x.phone)===normPhone(a.phone)));
+  if(confirm(`تمت قراءة ${list.length} وكيل. سيتم إضافة ${fresh.length} وكيل جديد (بدون حذف الموجودين). تكمل؟`)){
+   agents=agents.concat(fresh);save();alert('تم الاستيراد! الوكلاء الآن: '+agents.length)}
+ }catch(x){alert('ملف CSV غير صالح!')}e.target.value=''};
+ rd.readAsText(f,'utf-8')}
+$('csvfile').addEventListener('change',importCSV);
 
 if(prompt('الرجاء إدخال رمز الدخول:')===PASSWORD){
  $('app').style.display='block';$('unit').value=unit;resetForm();render();
